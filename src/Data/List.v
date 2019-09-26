@@ -53,7 +53,6 @@ Definition maybeToList `(mx : Maybe a) : list a :=
 (*
 Lemma rcons_nil : forall a us (u : a), rcons us u = [] -> False.
 Proof. by move=> a us u; case: us => // [|? ?] in u *. Qed.
-*)
 
 Definition olast a (l : list a) : Maybe a :=
   let fix go res xs :=
@@ -73,7 +72,7 @@ Example olast_ex3 : olast [1; 2; 3] = Just 3.
 Proof. reflexivity. Qed.
 
 Lemma olast_last : forall a (u : a) us,
-  olast (u :: us) = Just (last us u).
+  olast (u :: us) = Just (last u us).
 Proof.
   intros a u.
   induction us as [|x xs IHxs]; simpl; trivial.
@@ -87,20 +86,19 @@ Lemma olast_spec : forall a (u : a) us, olast (u :: us) = Nothing -> False.
 Proof.
   intros a u.
   induction us as [|x xs IHxs]; simpl; intros.
-    discriminate.
+
+   discriminate.
   rewrite olast_last in H.
   rewrite olast_last in IHxs.
   destruct xs as [|y ys]; discriminate.
 Qed.
 
-(*
 Lemma olast_rcons : forall a (u : a) us, olast (rcons us u) = Just u.
 Proof.
   move=> a u.
   elim=> //= [x xs IHxs].
   case: xs => // [|y ys] in IHxs *.
 Qed.
-*)
 
 Lemma olast_cons : forall a (x y : a) ys,
   olast (x :: y :: ys) = olast (y :: ys).
@@ -109,7 +107,6 @@ Proof.
   induction ys as [|? xs IHxs]; trivial.
 Qed.
 
-(*
 Lemma olast_cons_rcons : forall a (z u : a) us,
   olast (z :: rcons us u) = Just u.
 Proof.
@@ -118,19 +115,19 @@ Proof.
   case: xs => // [|y ys] in IHxs *.
 Qed.
 
+(*
 Lemma olast_cat : forall a (x : a) xs ys,
   olast (ys ++ x :: xs) = olast (x :: xs).
 Proof.
   intros a y xs ys.
   induction xs as [|z zs IHzs].
-    rewrite cats1, olast_rcons.
-  replace [y, z & zs] with ([y] ++ [z & zs]).
+    rewrite cats1 olast_rcons.
+    reflexivity.
+  replace [:: y, z & zs] with ([y] ++ [z & zs]).
     rewrite catA !IHzs.
   reflexivity.
 Qed.
-*)
 
-(*
 Lemma olast_cat_rcons : forall a (x : a) xs ys,
   olast (ys ++ rcons xs x) = Just x.
 Proof.
@@ -141,6 +138,7 @@ Proof.
   exact: IHzs.
 Qed.
 
+*)
 Definition oends a (l : list a) : Maybe (a + (a * a)).
 Proof.
   case: l => [|x xs].
@@ -163,8 +161,10 @@ Proof.
   by rewrite last_rcons.
 Qed.
 
+(*
 Lemma last_leq : forall (z y : nat) (xs : list nat) (n : nat),
-  last z xs <= n -> y <= z -> last y xs <= n.
+  last z xs <= n -> y <= z -> last xs y <= n.
+
 Proof.
   move=> z y.
   elim=> //= [x xs IHxs].
@@ -200,6 +200,7 @@ Proof.
   rewrite in_cons.
   by apply/orP; right.
 Defined.
+*)
 
 Definition list_membership {a : eqType} (l : list a) :
   list { x : a | x \in l } :=
@@ -1070,58 +1071,96 @@ Proof.
   congr (_ ++ _).
   exact: IHxs.
 Qed.
+*)
 
 Instance List_Functor : Functor list := {
-  fmap := fun _ _ => map
+  fmap := map
 }.
 
-Instance List_Applicative : Applicative list := {
+Fixpoint list_ap {A B} (fs: list (A -> B)) (xs: list A)
+  : list B :=
+  match fs with
+  | f :: fs' => map f xs ++ list_ap fs' xs
+  | _ => nil
+  end.
+
+Instance List_Applicative : Applicative list :=
+  {
   pure := fun _ x => [x];
-  ap   := fun _ _ fs xs => [list f x | f <- fs, x <- xs]
-}.
+  ap := @list_ap
+  }.
 
 Module ListLaws.
 
 Include MonadLaws.
+Require Import FunctionalExtensionality.
+
+Lemma list_ap_app : forall A B (v w: list (A -> B)) x,
+  list_ap (v ++ w) x = list_ap v x ++ list_ap w x.
+Proof.
+  induction v; intros; auto.
+  simpl.
+  rewrite IHv.
+  rewrite app_assoc.
+  reflexivity.
+Qed.
+
 
 Program Instance List_FunctorLaws : FunctorLaws list.
 Obligation 1.
-  move=> xs.
-  by rewrite map_id.
+unfold id.
+extensionality l.
+rewrite map_id.
+auto.
 Qed.
 Obligation 2.
-  move=> xs.
-  by rewrite /funcomp /= -!map_comp /funcomp.
+extensionality l.
+simpl.
+rewrite map_map.
+reflexivity.
 Qed.
 
 Program Instance List_ApplicativeLaws : ApplicativeLaws list.
 Obligation 1.
-  move=> xs.
-  elim: xs => [|x xs IHxs] //=.
-  by rewrite IHxs.
+extensionality l.
+rewrite <- app_nil_end.
+rewrite map_id.
+reflexivity.
 Qed.
 Obligation 2.
-  rewrite cats0.
-  elim: u => [|u us IHus] //=.
-  rewrite allpairs_cat {}IHus.
+simpl.
+induction u as [u | f fs].
+- simpl; auto.
+- simpl.
+  rewrite <- IHfs.
+  clear IHfs.
+  rewrite <- ?app_nil_end.
+  remember (list_ap
+            (map (fun (f : b -> c) (g : a -> b) (x : a) => f (g x)) fs) v)
+  as l'.
+  rewrite list_ap_app.
   f_equal.
-  elim: v => [|v vs IHvs] //=.
-  rewrite map_cat {}IHvs.
-  elim: w => [|w ws IHws] //=.
-  f_equal.
-  by rewrite -!map_comp /funcomp.
+  clear Heql'.
+  induction v.
+  -- simpl; eauto.
+  -- simpl.
+     rewrite IHv.
+     rewrite map_app.
+     f_equal.
+     rewrite map_map.
+     auto.
 Qed.
 Obligation 4.
-  rewrite cats0.
-  by elim: u.
+rewrite <- app_nil_end.
+induction u; simpl; f_equal; auto.
 Qed.
 Obligation 5.
-  move=> xs /=.
-  by rewrite cats0.
+extensionality l.
+rewrite <- app_nil_end.
+reflexivity.
 Qed.
 
 End ListLaws.
-*)
 
 Require Import
   Coq.Relations.Relations
