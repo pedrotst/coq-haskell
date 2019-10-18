@@ -1,3 +1,5 @@
+SHELL:=/bin/bash
+
 COQFLAGS = ""
 MISSING  =								\
 	find . -name '*.v' ! -name Notes.v				\
